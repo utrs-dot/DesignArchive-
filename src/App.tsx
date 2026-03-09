@@ -21,26 +21,46 @@ export default function App() {
   const [isLiked, setIsLiked] = useState(false);
   const [hue, setHue] = useState(0);
 
-  // Fetch initial likes
+  // Fetch initial likes and sync with localStorage
   React.useEffect(() => {
+    const savedLikes = parseInt(localStorage.getItem("studio_archive_likes") || "0");
+    setLikes(savedLikes);
+
     fetch("/api/likes")
       .then((res) => res.json())
-      .then((data) => setLikes(data.count))
+      .then((data) => {
+        const serverCount = data.count || 0;
+        // Take the higher value to prevent "refresh to 0" if server reset
+        const finalCount = Math.max(serverCount, savedLikes);
+        setLikes(finalCount);
+        localStorage.setItem("studio_archive_likes", finalCount.toString());
+      })
       .catch((err) => console.error("Failed to fetch likes:", err));
   }, []);
 
   const handleLike = async () => {
+    const newLocalCount = likes + 1;
+    setLikes(newLocalCount);
+    localStorage.setItem("studio_archive_likes", newLocalCount.toString());
+    
     setIsLiked(true);
     setHue((prev) => (prev + 40) % 360);
     
     try {
-      const response = await fetch("/api/likes", { method: "POST" });
+      const response = await fetch("/api/likes", { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentLocalCount: likes }) 
+      });
       const data = await response.json();
-      setLikes(data.count);
+      
+      // Sync back if server has a higher count (from other users)
+      if (data.count > newLocalCount) {
+        setLikes(data.count);
+        localStorage.setItem("studio_archive_likes", data.count.toString());
+      }
     } catch (err) {
       console.error("Failed to update likes:", err);
-      // Fallback local increment if API fails
-      setLikes((prev) => prev + 1);
     }
 
     // Reset heart animation state after a short delay

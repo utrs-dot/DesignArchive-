@@ -46,7 +46,16 @@ async function startServer() {
   });
 
   app.post("/api/likes", (req, res) => {
-    const currentCount = getLikes();
+    const { currentLocalCount } = req.body;
+    let currentCount = getLikes();
+    
+    // Fail-safe: If the client reports a higher count than the server, 
+    // it means the server likely reset. We restore the count from the client.
+    if (typeof currentLocalCount === "number" && currentLocalCount > currentCount) {
+      console.log(`Restoring count from client: ${currentLocalCount}`);
+      currentCount = currentLocalCount;
+    }
+    
     const newCount = currentCount + 1;
     saveLikes(newCount);
     console.log(`POST /api/likes: ${newCount}`);
