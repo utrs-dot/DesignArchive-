@@ -1,6 +1,6 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import Database from "better-sqlite3";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -11,28 +11,46 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Initialize SQLite database
-  const db = new Database("likes.db");
-  db.exec("CREATE TABLE IF NOT EXISTS counters (id TEXT PRIMARY KEY, count INTEGER)");
+  // Initialize JSON storage
+  const dbPath = path.join(__dirname, "likes.json");
   
-  // Initialize counter if not exists
-  const row = db.prepare("SELECT count FROM counters WHERE id = ?").get("likes");
-  if (!row) {
-    db.prepare("INSERT INTO counters (id, count) VALUES (?, ?)").run("likes", 0);
-  }
+  const getLikes = () => {
+    try {
+      if (!fs.existsSync(dbPath)) {
+        fs.writeFileSync(dbPath, JSON.stringify({ count: 0 }));
+        return 0;
+      }
+      const data = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
+      return data.count || 0;
+    } catch (error) {
+      console.error("Error reading likes.json:", error);
+      return 0;
+    }
+  };
+
+  const saveLikes = (count: number) => {
+    try {
+      fs.writeFileSync(dbPath, JSON.stringify({ count }));
+    } catch (error) {
+      console.error("Error writing likes.json:", error);
+    }
+  };
 
   app.use(express.json());
 
   // API routes
   app.get("/api/likes", (req, res) => {
-    const row = db.prepare("SELECT count FROM counters WHERE id = ?").get("likes") as { count: number };
-    res.json({ count: row.count });
+    const count = getLikes();
+    console.log(`GET /api/likes: ${count}`);
+    res.json({ count });
   });
 
   app.post("/api/likes", (req, res) => {
-    db.prepare("UPDATE counters SET count = count + 1 WHERE id = ?").run("likes");
-    const row = db.prepare("SELECT count FROM counters WHERE id = ?").get("likes") as { count: number };
-    res.json({ count: row.count });
+    const currentCount = getLikes();
+    const newCount = currentCount + 1;
+    saveLikes(newCount);
+    console.log(`POST /api/likes: ${newCount}`);
+    res.json({ count: newCount });
   });
 
   // Vite middleware for development
