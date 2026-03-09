@@ -21,10 +21,28 @@ export default function App() {
   const [isLiked, setIsLiked] = useState(false);
   const [hue, setHue] = useState(0);
 
-  const handleLike = () => {
-    setLikes(prev => prev + 1);
+  // Fetch initial likes
+  React.useEffect(() => {
+    fetch("/api/likes")
+      .then((res) => res.json())
+      .then((data) => setLikes(data.count))
+      .catch((err) => console.error("Failed to fetch likes:", err));
+  }, []);
+
+  const handleLike = async () => {
     setIsLiked(true);
-    setHue(prev => (prev + 40) % 360); // Shift hue on each click
+    setHue((prev) => (prev + 40) % 360);
+    
+    try {
+      const response = await fetch("/api/likes", { method: "POST" });
+      const data = await response.json();
+      setLikes(data.count);
+    } catch (err) {
+      console.error("Failed to update likes:", err);
+      // Fallback local increment if API fails
+      setLikes((prev) => prev + 1);
+    }
+
     // Reset heart animation state after a short delay
     setTimeout(() => setIsLiked(false), 600);
   };
