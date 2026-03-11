@@ -26,16 +26,26 @@ export default function App() {
     const savedLikes = parseInt(localStorage.getItem("studio_archive_likes") || "0");
     setLikes(savedLikes);
 
-    fetch("/api/likes")
+    // Aggressive Sync: Immediately tell the server our local count to "warm it up"
+    fetch("/api/likes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentLocalCount: savedLikes, isSync: true })
+    })
       .then((res) => res.json())
       .then((data) => {
         const serverCount = data.count || 0;
-        // Take the higher value to prevent "refresh to 0" if server reset
         const finalCount = Math.max(serverCount, savedLikes);
         setLikes(finalCount);
         localStorage.setItem("studio_archive_likes", finalCount.toString());
       })
-      .catch((err) => console.error("Failed to fetch likes:", err));
+      .catch((err) => {
+        console.error("Failed to sync likes:", err);
+        // Fallback to just fetching if POST fails
+        fetch("/api/likes")
+          .then(res => res.json())
+          .then(data => setLikes(prev => Math.max(prev, data.count || 0)));
+      });
   }, []);
 
   const handleLike = async () => {

@@ -46,19 +46,20 @@ async function startServer() {
   });
 
   app.post("/api/likes", (req, res) => {
-    const { currentLocalCount } = req.body;
+    const { currentLocalCount, isSync } = req.body;
     let currentCount = getLikes();
     
-    // Fail-safe: If the client reports a higher count than the server, 
-    // it means the server likely reset. We restore the count from the client.
+    // Fail-safe: Restore count from client if server reset
     if (typeof currentLocalCount === "number" && currentLocalCount > currentCount) {
       console.log(`Restoring count from client: ${currentLocalCount}`);
       currentCount = currentLocalCount;
     }
     
-    const newCount = currentCount + 1;
+    // Only increment if it's a real click, not just a background sync
+    const newCount = isSync ? currentCount : currentCount + 1;
+    
     saveLikes(newCount);
-    console.log(`POST /api/likes: ${newCount}`);
+    console.log(`${isSync ? 'SYNC' : 'POST'} /api/likes: ${newCount}`);
     res.json({ count: newCount });
   });
 
