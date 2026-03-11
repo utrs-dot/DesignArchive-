@@ -41,7 +41,8 @@ async function startServer() {
   // API routes
   app.get("/api/likes", (req, res) => {
     const count = getLikes();
-    console.log(`GET /api/likes: ${count}`);
+    console.log(`[${new Date().toISOString()}] GET /api/likes: ${count}`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.json({ count });
   });
 
@@ -51,7 +52,7 @@ async function startServer() {
     
     // Fail-safe: Restore count from client if server reset
     if (typeof currentLocalCount === "number" && currentLocalCount > currentCount) {
-      console.log(`Restoring count from client: ${currentLocalCount}`);
+      console.log(`[${new Date().toISOString()}] RESTORE: Client reported ${currentLocalCount}, Server had ${currentCount}`);
       currentCount = currentLocalCount;
     }
     
@@ -59,7 +60,8 @@ async function startServer() {
     const newCount = isSync ? currentCount : currentCount + 1;
     
     saveLikes(newCount);
-    console.log(`${isSync ? 'SYNC' : 'POST'} /api/likes: ${newCount}`);
+    console.log(`[${new Date().toISOString()}] ${isSync ? 'SYNC' : 'CLICK'}: New Total ${newCount}`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.json({ count: newCount });
   });
 
