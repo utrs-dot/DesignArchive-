@@ -5,7 +5,8 @@
 
 import { motion } from "motion/react";
 import { Heart } from "lucide-react";
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { io, Socket } from "socket.io-client";
 
 export default function App() {
   // Using a more robust Google Drive direct link format
@@ -20,49 +21,44 @@ export default function App() {
   const [likes, setLikes] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
   const [hue, setHue] = useState(0);
+  const socketRef = useRef<Socket | null>(null);
 
-  // Sync with server function
-  const syncWithServer = React.useCallback(async (localCount: number, isSync: boolean = true) => {
-    try {
-      const response = await fetch(`/api/likes?t=${Date.now()}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentLocalCount: localCount, isSync })
-      });
-      const data = await response.json();
+  // Socket.io initialization
+  useEffect(() => {
+    // Initialize socket
+    const socket = io();
+    socketRef.current = socket;
+
+    // Load local count first for instant UI
+    const savedLikes = parseInt(localStorage.getItem("studio_archive_likes") || "0");
+    setLikes(savedLikes);
+
+    // Listen for global updates
+    socket.on("likes_update", (data: { count: number }) => {
       const serverCount = data.count || 0;
-      
-      // Always take the higher value to ensure we never lose counts
       setLikes(prev => {
-        const finalCount = Math.max(serverCount, prev, localCount);
-        if (finalCount !== prev) {
+        const localSaved = parseInt(localStorage.getItem("studio_archive_likes") || "0");
+        const finalCount = Math.max(serverCount, prev, localSaved);
+        if (finalCount !== localSaved) {
           localStorage.setItem("studio_archive_likes", finalCount.toString());
         }
         return finalCount;
       });
-    } catch (err) {
-      console.error("Failed to sync likes:", err);
-    }
+    });
+
+    // Sync local state to server on connection (Fail-safe)
+    socket.on("connect", () => {
+      const currentLocal = parseInt(localStorage.getItem("studio_archive_likes") || "0");
+      socket.emit("sync_likes", { localCount: currentLocal });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
-  // Initial load and polling
-  React.useEffect(() => {
-    const savedLikes = parseInt(localStorage.getItem("studio_archive_likes") || "0");
-    setLikes(savedLikes);
-
-    // Initial sync
-    syncWithServer(savedLikes, true);
-
-    // Poll every 5 seconds for global updates
-    const interval = setInterval(() => {
-      const currentLikes = parseInt(localStorage.getItem("studio_archive_likes") || "0");
-      syncWithServer(currentLikes, true);
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [syncWithServer]);
-
-  const handleLike = async () => {
+  const handleLike = () => {
+    // Optimistic update
     const newLocalCount = likes + 1;
     setLikes(newLocalCount);
     localStorage.setItem("studio_archive_likes", newLocalCount.toString());
@@ -70,8 +66,10 @@ export default function App() {
     setIsLiked(true);
     setHue((prev) => (prev + 40) % 360);
     
-    // Immediate sync on click
-    syncWithServer(newLocalCount, false);
+    // Emit click to server
+    if (socketRef.current) {
+      socketRef.current.emit("click_like");
+    }
 
     // Reset heart animation state after a short delay
     setTimeout(() => setIsLiked(false), 600);
